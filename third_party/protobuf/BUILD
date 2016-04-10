@@ -34,7 +34,7 @@ filegroup(
 
 java_import(
     name = "protobuf",
-    jars = ["protobuf-java-3.0.0-beta-1.jar"],
+    jars = ["protobuf-java-3.0.0-beta-1.jar", "protobuf-java-util-3.0.0-beta-1.jar"],
 )
 
 # For bootstrapping JavaBuilder
