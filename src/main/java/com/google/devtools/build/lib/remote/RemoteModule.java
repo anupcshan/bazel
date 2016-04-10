@@ -24,6 +24,9 @@ import com.google.devtools.build.lib.runtime.Command;
 import com.google.devtools.build.lib.runtime.CommandEnvironment;
 import com.google.devtools.common.options.OptionsBase;
 
+import java.net.URL;
+import java.net.MalformedURLException;
+
 /**
  * RemoteModule provides distributed cache and remote execution for Bazel.
  */
@@ -63,12 +66,22 @@ public final class RemoteModule extends BlazeModule {
 
     // Don't provide the remote spawn unless at least action cache is initialized.
     if (actionCache == null && options.hazelcastNode != null) {
-      actionCache =
+      MemcacheActionCache cache =
           new MemcacheActionCache(
               env.getExecRoot(),
               options,
               HazelcastCacheFactory.create(options));
-      // TODO(alpha): Initialize a RemoteWorkExecutor.
+
+      actionCache = cache;
+
+      if (workExecutor == null && options.restWorkerUrl != null) {
+        try {
+          workExecutor = new RestWorkExecutor(cache, new URL(options.restWorkerUrl));
+        } catch (MalformedURLException e) {
+          // env.getReporter().handle(
+          //    Event.warn("Not a valid value for --rest_worker_url. Work will run locally."));
+        }
+      }
     }
   }
 
