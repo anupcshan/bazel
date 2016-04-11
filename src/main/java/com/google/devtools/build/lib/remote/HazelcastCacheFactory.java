@@ -19,6 +19,9 @@ import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.ClientNetworkConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.core.IMap;
+import com.hazelcast.map.MapInterceptor;
+import com.hazelcast.internal.ascii.rest.RestValue;
 
 import java.util.concurrent.ConcurrentMap;
 
@@ -43,6 +46,7 @@ final class HazelcastCacheFactory {
       // -Dhazelcast.config=some-hazelcast.xml for configuration.
       instance = Hazelcast.newHazelcastInstance();
     }
-    return instance.getMap(CACHE_NAME);
+    IMap<String, byte[]> cache = instance.getMap(CACHE_NAME);
+    return cache;
   }
 }

@@ -31,6 +31,8 @@ import java.util.Collection;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Semaphore;
 
+import com.hazelcast.internal.ascii.rest.RestValue;
+
 /**
  * A RemoteActionCache implementation that uses memcache as a distributed storage
  * for files and action output. The memcache is accessed by the {@link ConcurrentMap}
@@ -100,7 +102,15 @@ final class MemcacheActionCache implements RemoteActionCache {
   @Override
   public void writeFile(String key, Path dest, boolean executable)
       throws IOException, CacheNotFoundException {
-    byte[] data = cache.get(key);
+    byte[] data;
+    Object cachedData = cache.get(key);
+
+    try {
+      data = (byte[])cachedData;
+    } catch (ClassCastException ce) {
+      RestValue restValue = (RestValue) cachedData;
+      data = restValue.getValue();
+    }
     if (data == null) {
       throw new CacheNotFoundException("File content cannot be found with key: " + key);
     }
@@ -117,7 +127,15 @@ final class MemcacheActionCache implements RemoteActionCache {
   @Override
   public void writeActionOutput(String key, Path execRoot)
       throws IOException, CacheNotFoundException {
-    byte[] data = cache.get(key);
+    byte[] data;
+    Object cachedData = cache.get(key);
+
+    try {
+      data = (byte[])cachedData;
+    } catch (ClassCastException ce) {
+      RestValue restValue = (RestValue) cachedData;
+      data = restValue.getValue();
+    }
     if (data == null) {
       throw new CacheNotFoundException("Action output cannot be found with key: " + key);
     }
