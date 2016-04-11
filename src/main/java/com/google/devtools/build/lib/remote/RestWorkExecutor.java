@@ -22,7 +22,6 @@ import com.google.devtools.build.lib.remote.RemoteProtocol.RemoteWorkRequest;
 import com.google.devtools.build.lib.remote.RemoteProtocol.RemoteWorkResponse;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.util.JsonFormat;
 
 import java.io.IOException;
 import java.net.URL;
@@ -33,7 +32,7 @@ import java.util.concurrent.Callable;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.DefaultHttpClient;
 
@@ -65,16 +64,16 @@ class RestWorkExecutor extends MemcacheWorkExecutor {
         // TODO(alpha): Should have a connection pool to get better performance.
         final HttpClient httpClient = new DefaultHttpClient();
         HttpPost post = new HttpPost(workerUrl.toURI());
-        StringEntity workJson = new StringEntity(JsonFormat.printer().print(work), "UTF-8");
-        post.addHeader("content-type", "application/json");
-        post.setEntity(workJson);
+        post.addHeader("content-type", "application/x-protobuf");
+        post.setEntity(new ByteArrayEntity(work.toByteArray()));
         HttpResponse response = httpClient.execute(post);
 
         // The REST call is blocking and returns when the work is done.
         // TODO(alpha): Change this to an async call by listening to the completion event.
-        String responseJson = new BasicResponseHandler().handleResponse(response);
+        String responseContent = new BasicResponseHandler().handleResponse(response);
+        byte[] bytes = responseContent.getBytes("UTF8");
         RemoteWorkResponse.Builder workResponse = RemoteWorkResponse.newBuilder();
-        JsonFormat.parser().merge(responseJson, workResponse);
+        workResponse.mergeFrom(bytes);
         return new Response(workResponse.getSuccess(), workResponse.getOut(),
                             workResponse.getErr(), workResponse.getException());
       }
