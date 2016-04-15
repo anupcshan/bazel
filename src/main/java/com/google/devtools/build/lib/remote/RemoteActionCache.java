@@ -21,6 +21,7 @@ import com.google.devtools.build.lib.vfs.Path;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.concurrent.Future;
 
 /**
  * A cache for storing artifacts (input and output) as well as the output of running an action.
@@ -33,14 +34,14 @@ interface RemoteActionCache {
    *
    * @return The key for fetching the file from cache.
    */
-  String putFileIfNotExist(Path file) throws IOException;
+  Future<String> putFileIfNotExist(Path file) throws IOException;
 
   /**
    * Same as {@link putFileIfNotExist(Path)} but this methods takes an ActionInput.
    *
    * @return The key for fetching the file from cache.
    */
-  String putFileIfNotExist(ActionInputFileCache cache, ActionInput file) throws IOException;
+  Future<String> putFileIfNotExist(ActionInputFileCache cache, ActionInput file) throws IOException;
 
   /**
    * Write the file in cache identified by key to the file system. The key must uniquely identify

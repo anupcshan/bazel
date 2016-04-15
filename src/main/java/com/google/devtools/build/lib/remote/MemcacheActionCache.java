@@ -15,6 +15,7 @@
 package com.google.devtools.build.lib.remote;
 
 import com.google.common.hash.HashCode;
+import com.google.common.util.concurrent.Futures;
 import com.google.devtools.build.lib.actions.ActionInput;
 import com.google.devtools.build.lib.actions.ActionInputFileCache;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.ThreadSafe;
@@ -29,7 +30,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collection;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
+import java.util.HashMap;
 
 import com.hazelcast.internal.ascii.rest.RestValue;
 
@@ -46,6 +50,7 @@ final class MemcacheActionCache implements RemoteActionCache {
   private final ConcurrentMap<String, byte[]> cache;
   private static final int MAX_MEMORY_KBYTES = 512 * 1024;
   private final Semaphore uploadMemoryAvailable = new Semaphore(MAX_MEMORY_KBYTES, true);
+  private final Semaphore mapLock = new Semaphore(1);
 
   /**
    * Construct an action cache using JCache API.
@@ -57,27 +62,28 @@ final class MemcacheActionCache implements RemoteActionCache {
   }
 
   @Override
-  public String putFileIfNotExist(Path file) throws IOException {
+  public Future<String> putFileIfNotExist(Path file) throws IOException {
     String contentKey = HashCode.fromBytes(file.getMD5Digest()).toString();
     if (containsFile(contentKey)) {
-      return contentKey;
+      return Futures.immediateFuture(contentKey);
     }
     putFile(contentKey, file);
-    return contentKey;
+    return Futures.immediateFuture(contentKey);
   }
 
   @Override
-  public String putFileIfNotExist(ActionInputFileCache cache, ActionInput file) throws IOException {
+  public Future<String> putFileIfNotExist(ActionInputFileCache cache, ActionInput file) throws IOException {
     // PerActionFileCache already converted this to a lowercase ascii string.. it's not consistent!
     String contentKey = new String(cache.getDigest(file).toByteArray());
     if (containsFile(contentKey)) {
-      return contentKey;
+      return Futures.immediateFuture(contentKey);
     }
     putFile(contentKey, execRoot.getRelative(file.getExecPathString()));
-    return contentKey;
+    return Futures.immediateFuture(contentKey);
   }
 
   private void putFile(String key, Path file) throws IOException {
+    System.out.println("Uploading:" + key);
     int fileSizeKBytes = (int) (file.getFileSize() / 1024);
     Preconditions.checkArgument(fileSizeKBytes < MAX_MEMORY_KBYTES);
     try {
@@ -85,7 +91,7 @@ final class MemcacheActionCache implements RemoteActionCache {
       // TODO(alpha): I should put the file content as chunks to avoid reading the entire
       // file into memory.
       try (InputStream stream = file.getInputStream()) {
-        cache.put(
+        cache.putIfAbsent(
             key,
             CacheEntry.newBuilder()
                 .setFileContent(ByteString.readFrom(stream))
@@ -149,9 +155,21 @@ final class MemcacheActionCache implements RemoteActionCache {
   public void putActionOutput(String key, Collection<? extends ActionInput> outputs)
       throws IOException {
     CacheEntry.Builder actionOutput = CacheEntry.newBuilder();
+    HashMap<ActionInput, Future<String>> keyFutures = new HashMap<ActionInput, Future<String>>();
     for (ActionInput output : outputs) {
       Path file = execRoot.getRelative(output.getExecPathString());
-      addToActionOutput(file, output.getExecPathString(), actionOutput);
+      keyFutures.put(output, putFileIfNotExist(file));
+    }
+
+    for (ActionInput output : outputs) {
+      Path file = execRoot.getRelative(output.getExecPathString());
+      try {
+        addToActionOutput(keyFutures.get(output).get(), output.getExecPathString(), actionOutput, file.isExecutable());
+      } catch (InterruptedException e) {
+        throw new IOException("Failed to put file to memory cache.", e);
+      } catch (ExecutionException e) {
+        throw new IOException("Failed to put file to memory cache.", e);
+      }
     }
     cache.put(key, actionOutput.build().toByteArray());
   }
@@ -160,8 +178,19 @@ final class MemcacheActionCache implements RemoteActionCache {
   public void putActionOutput(String key, Path execRoot, Collection<Path> files)
       throws IOException {
     CacheEntry.Builder actionOutput = CacheEntry.newBuilder();
+    HashMap<Path, Future<String>> keyFutures = new HashMap<Path, Future<String>>();
     for (Path file : files) {
-      addToActionOutput(file, file.relativeTo(execRoot).getPathString(), actionOutput);
+      keyFutures.put(file, putFileIfNotExist(file));
+    }
+
+    for (Path file : files) {
+      try {
+        addToActionOutput(keyFutures.get(file).get(), file.relativeTo(execRoot).getPathString(), actionOutput, file.isExecutable());
+      } catch (InterruptedException e) {
+        throw new IOException("Failed to put file to memory cache.", e);
+      } catch (ExecutionException e) {
+        throw new IOException("Failed to put file to memory cache.", e);
+      }
     }
     cache.put(key, actionOutput.build().toByteArray());
   }
@@ -169,19 +198,20 @@ final class MemcacheActionCache implements RemoteActionCache {
   /**
    * Add the file to action output cache entry. Put the file to cache if necessary.
    */
-  private void addToActionOutput(Path file, String execPathString, CacheEntry.Builder actionOutput)
+  private void addToActionOutput(String contentKey, String execPathString, CacheEntry.Builder actionOutput, boolean isExecutable)
       throws IOException {
+    /*
     if (file.isDirectory()) {
       // TODO(alpha): Implement this for directory.
       throw new UnsupportedOperationException("Storing a directory is not yet supported.");
     }
-    // First put the file content to cache.
-    String contentKey = putFileIfNotExist(file);
+    */
+
     // Add to protobuf.
     actionOutput
         .addFilesBuilder()
         .setPath(execPathString)
         .setContentKey(contentKey)
-        .setExecutable(file.isExecutable());
+        .setExecutable(isExecutable);
   }
 }

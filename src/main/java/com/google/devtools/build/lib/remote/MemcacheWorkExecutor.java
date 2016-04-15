@@ -37,6 +37,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /**
  * Implementation of {@link RemoteWorkExecutor} that uses MemcacheActionCache and protobufs for
@@ -101,11 +103,17 @@ public class MemcacheWorkExecutor implements RemoteWorkExecutor {
         continue;
       }
  
-      String contentKey = cache.putFileIfNotExist(actionCache, input);
-      work.addInputFilesBuilder()
-          .setPath(input.getExecPathString())
-          .setContentKey(contentKey)
-          .setExecutable(file.isExecutable());
+      Future<String> contentKey = cache.putFileIfNotExist(actionCache, input);
+      try {
+        work.addInputFilesBuilder()
+            .setPath(input.getExecPathString())
+            .setContentKey(contentKey.get())
+            .setExecutable(file.isExecutable());
+      } catch (InterruptedException e) {
+        throw new IOException("Failed to put file to memory cache.", e);
+      } catch (ExecutionException e) {
+        throw new IOException("Failed to put file to memory cache.", e);
+      }
     }
 
     work.addAllArguments(arguments);
