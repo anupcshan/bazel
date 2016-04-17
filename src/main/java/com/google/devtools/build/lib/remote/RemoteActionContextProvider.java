@@ -43,6 +43,9 @@ final class RemoteActionContextProvider extends ActionContextProvider {
             verboseFailures,
             actionCache,
             workExecutor));
+    strategiesBuilder.add(
+        new RemoteTestStrategy(
+            buildRequest, env.getBlazeWorkspace().getBinTools(), env.getClientEnv()));
     this.strategies = strategiesBuilder.build();
   }
 
