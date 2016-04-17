@@ -29,8 +29,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collection;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.HashMap;
@@ -51,6 +54,7 @@ final class MemcacheActionCache implements RemoteActionCache {
   private static final int MAX_MEMORY_KBYTES = 512 * 1024;
   private final Semaphore uploadMemoryAvailable = new Semaphore(MAX_MEMORY_KBYTES, true);
   private final Semaphore mapLock = new Semaphore(1);
+  private final ExecutorService cacheUploadService = Executors.newFixedThreadPool(150);
 
   /**
    * Construct an action cache using JCache API.
@@ -64,22 +68,30 @@ final class MemcacheActionCache implements RemoteActionCache {
   @Override
   public Future<String> putFileIfNotExist(Path file) throws IOException {
     String contentKey = HashCode.fromBytes(file.getMD5Digest()).toString();
-    if (containsFile(contentKey)) {
-      return Futures.immediateFuture(contentKey);
-    }
-    putFile(contentKey, file);
-    return Futures.immediateFuture(contentKey);
+    return cacheUploadService.submit(new Callable<String>() {
+      public String call() throws IOException {
+        if (containsFile(contentKey)) {
+          return contentKey;
+        }
+        putFile(contentKey, file);
+        return contentKey;
+      }
+    });
   }
 
   @Override
   public Future<String> putFileIfNotExist(ActionInputFileCache cache, ActionInput file) throws IOException {
     // PerActionFileCache already converted this to a lowercase ascii string.. it's not consistent!
     String contentKey = new String(cache.getDigest(file).toByteArray());
-    if (containsFile(contentKey)) {
-      return Futures.immediateFuture(contentKey);
-    }
-    putFile(contentKey, execRoot.getRelative(file.getExecPathString()));
-    return Futures.immediateFuture(contentKey);
+    return cacheUploadService.submit(new Callable<String>() {
+      public String call() throws IOException {
+        if (containsFile(contentKey)) {
+          return contentKey;
+        }
+        putFile(contentKey, execRoot.getRelative(file.getExecPathString()));
+        return contentKey;
+      }
+    });
   }
 
   private void putFile(String key, Path file) throws IOException {
