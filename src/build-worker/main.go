@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"src/build-worker/cache"
-	"src/build-worker/remote"
+	remote "src/main/protobuf"
 
 	"github.com/golang/protobuf/proto"
 )

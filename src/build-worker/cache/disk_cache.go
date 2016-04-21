@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"src/build-worker/remote"
+	remote "src/main/protobuf"
 
 	"github.com/golang/protobuf/proto"
 )

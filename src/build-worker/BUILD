@@ -5,7 +5,7 @@ go_binary(
     srcs = glob(["main.go"]),
     deps = [
         "//src/build-worker/cache:go_default_library",
-        "//src/build-worker/remote:go_default_library",
+        "//src/main/protobuf:go_default_library",
         "//src/build-worker/vendor/github.com/golang/protobuf/proto:go_default_library",
     ],
 )
