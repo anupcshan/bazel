@@ -50,3 +50,27 @@ filegroup(
     name = "srcs",
     srcs = glob(["**"]),
 )
+
+genrule(
+    name = "remote_protocol_go_proto",
+    srcs = [
+        "remote_protocol.proto",
+        "//src/build-worker/vendor/github.com/golang/protobuf/protoc-gen-go:protoc-gen-go",
+        "//third_party/protobuf:protoc",
+    ],
+    outs = ["remote_protocol.pb.go"],
+    cmd = "set -eu; oldpwd=$$(pwd); \
+           protoc_gen_go=$$(echo $(locations //src/build-worker/vendor/github.com/golang/protobuf/protoc-gen-go:protoc-gen-go) | grep -wo '[^\ ]*protoc-gen-go' | uniq); \
+           cd $$(dirname $(location :remote_protocol.proto)); \
+           $$oldpwd/$(location //third_party/protobuf:protoc) --plugin=$$oldpwd/$$protoc_gen_go --go_out=$$oldpwd/$(@D) $$(basename $(location :remote_protocol.proto))",
+)
+
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_prefix")
+
+go_library(
+    name = "go_default_library",
+    srcs = [":remote_protocol_go_proto"],
+    deps = [
+        "//src/build-worker/vendor/github.com/golang/protobuf/proto:go_default_library",
+    ],
+)
