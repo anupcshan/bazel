@@ -173,12 +173,15 @@ func (bh *BuildRequestHandler) HandleBuildRequest(w http.ResponseWriter, r *http
 	wg.Wait()
 	logger.Printf("Completed caching input files in %s", time.Since(cacheStart))
 
+	linkStart := time.Now()
+
 	for _, inputFile := range workReq.GetInputFiles() {
 		if err := linkCachedObject(inputFile.Path, workDir, bh.diskCache.GetLink(inputFile.ContentKey)); err != nil {
 			writeError(w, http.StatusInternalServerError, workRes, err)
 			return
 		}
 	}
+	logger.Printf("Completed linking input files in %s", time.Since(linkStart))
 
 	// Most actions expect directories for output files to exist up front.
 	for _, outputFile := range workReq.GetOutputFiles() {
@@ -207,7 +210,10 @@ func (bh *BuildRequestHandler) HandleBuildRequest(w http.ResponseWriter, r *http
 	if *logCommands {
 		logger.Println("Executing:", workReq.Arguments)
 	}
+
+	execStart := time.Now()
 	err = cmd.Run()
+	logger.Printf("Completed command execution in %s", time.Since(execStart))
 	if err != nil {
 		if *logCommands {
 			logger.Println("===================")
@@ -264,7 +270,7 @@ func main() {
 
 	buildRequestHandler := &BuildRequestHandler{hazelcastCache: hc, diskCache: diskCache}
 
-	http.HandleFunc("/", buildRequestHandler.HandleBuildRequest)
+	http.HandleFunc("/build", buildRequestHandler.HandleBuildRequest)
 
 	err := http.ListenAndServe(listenAddr, nil)
 	log.Fatal(err)
