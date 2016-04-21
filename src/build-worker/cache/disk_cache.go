@@ -115,8 +115,10 @@ func (dc *DiskCache) fetchKey(key string, executable bool) error {
 			return err
 		}
 		_, err = f.Write(cacheEntry.FileContent)
-		dc.releaseFetchTask(key, MISSING)
-		return err
+		if err != nil {
+			dc.releaseFetchTask(key, MISSING)
+			return err
+		}
 	}
 
 	dc.releaseFetchTask(key, PRESENT)
