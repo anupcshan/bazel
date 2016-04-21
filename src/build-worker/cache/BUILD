@@ -6,7 +6,7 @@ go_library(
     name = "go_default_library",
     srcs = glob(["*.go"]),
     deps = [
-        "//remote:go_default_library",
-        "//vendor/github.com/golang/protobuf/proto:go_default_library",
+        "//src/build-worker/remote:go_default_library",
+        "//src/build-worker/vendor/github.com/golang/protobuf/proto:go_default_library",
     ],
 )

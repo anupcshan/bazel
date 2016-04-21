@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anupcshan/bazel-build-worker/remote"
+	"src/build-worker/remote"
+
 	"github.com/golang/protobuf/proto"
 )
 
