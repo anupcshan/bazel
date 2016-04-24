@@ -36,6 +36,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
+import java.util.Map;
 import java.util.HashMap;
 
 import com.hazelcast.internal.ascii.rest.RestValue;
@@ -53,7 +54,8 @@ final class MemcacheActionCache implements RemoteActionCache {
   private final ConcurrentMap<String, byte[]> cache;
   private static final int MAX_MEMORY_KBYTES = 512 * 1024;
   private final Semaphore uploadMemoryAvailable = new Semaphore(MAX_MEMORY_KBYTES, true);
-  private final Semaphore mapLock = new Semaphore(1);
+  private final Semaphore uploadLock = new Semaphore(1);
+  private final Map<String, Semaphore> uploadingKeys = new HashMap<String, Semaphore>();
   private final ExecutorService cacheUploadService = Executors.newFixedThreadPool(150);
 
   /**
@@ -73,7 +75,30 @@ final class MemcacheActionCache implements RemoteActionCache {
         if (containsFile(contentKey)) {
           return contentKey;
         }
-        putFile(contentKey, file);
+        Semaphore waitKey;
+        try {
+          uploadLock.acquire(1);
+          if (!uploadingKeys.containsKey(contentKey)) {
+            uploadingKeys.put(contentKey, new Semaphore(1));
+          }
+          waitKey = uploadingKeys.get(contentKey);
+        } catch (InterruptedException e) {
+          throw new IOException("Failed to put file to memory cache.", e);
+        } finally {
+          uploadLock.release(1);
+        }
+
+        try {
+          waitKey.acquire(1);
+          if (containsFile(contentKey)) {
+            return contentKey;
+          }
+          putFile(contentKey, file);
+        } catch (InterruptedException e) {
+          throw new IOException("Failed to put file to memory cache.", e);
+        } finally {
+          waitKey.release(1);
+        }
         return contentKey;
       }
     });
@@ -88,7 +113,30 @@ final class MemcacheActionCache implements RemoteActionCache {
         if (containsFile(contentKey)) {
           return contentKey;
         }
-        putFile(contentKey, execRoot.getRelative(file.getExecPathString()));
+        Semaphore waitKey;
+        try {
+          uploadLock.acquire(1);
+          if (!uploadingKeys.containsKey(contentKey)) {
+            uploadingKeys.put(contentKey, new Semaphore(1));
+          }
+          waitKey = uploadingKeys.get(contentKey);
+        } catch (InterruptedException e) {
+          throw new IOException("Failed to put file to memory cache.", e);
+        } finally {
+          uploadLock.release(1);
+        }
+
+        try {
+          waitKey.acquire(1);
+          if (containsFile(contentKey)) {
+            return contentKey;
+          }
+          putFile(contentKey, execRoot.getRelative(file.getExecPathString()));
+        } catch (InterruptedException e) {
+          throw new IOException("Failed to put file to memory cache.", e);
+        } finally {
+          waitKey.release(1);
+        }
         return contentKey;
       }
     });
