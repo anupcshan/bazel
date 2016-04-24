@@ -266,6 +266,10 @@ func main() {
 	listenAddr := fmt.Sprintf(":%d", *port)
 
 	hc := cache.NewHazelcastCache(*cacheBaseURL)
+	if err := os.MkdirAll(*cacheDir, 0755); err != nil {
+		log.Fatal(err)
+	}
+
 	diskCache := cache.NewDiskCache(*cacheDir, hc)
 
 	buildRequestHandler := &BuildRequestHandler{hazelcastCache: hc, diskCache: diskCache}
