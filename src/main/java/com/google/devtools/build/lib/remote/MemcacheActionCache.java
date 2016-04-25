@@ -78,6 +78,17 @@ final class MemcacheActionCache implements RemoteActionCache {
   @Override
   public ListenableFuture<String> putFileIfNotExist(Path file) throws IOException {
     String contentKey = HashCode.fromBytes(file.getMD5Digest()).toString();
+    return putFileIfNotExist(contentKey, file);
+  }
+
+  @Override
+  public ListenableFuture<String> putFileIfNotExist(ActionInputFileCache cache, ActionInput file) throws IOException {
+    // PerActionFileCache already converted this to a lowercase ascii string.. it's not consistent!
+    String contentKey = new String(cache.getDigest(file).toByteArray());
+    return putFileIfNotExist(contentKey, execRoot.getRelative(file.getExecPathString()));
+  }
+
+  private ListenableFuture<String> putFileIfNotExist(String contentKey, Path file) throws IOException {
     return cacheUploadService.submit(new Callable<String>() {
       public String call() throws IOException {
         if (containsFile(contentKey)) {
@@ -104,46 +115,6 @@ final class MemcacheActionCache implements RemoteActionCache {
             return contentKey;
           }
           putFile(contentKey, file);
-        } catch (InterruptedException e) {
-          throw new IOException("Failed to put file to memory cache.", e);
-        } finally {
-          waitKey.release(1);
-        }
-        return contentKey;
-      }
-    });
-  }
-
-  @Override
-  public ListenableFuture<String> putFileIfNotExist(ActionInputFileCache cache, ActionInput file) throws IOException {
-    // PerActionFileCache already converted this to a lowercase ascii string.. it's not consistent!
-    String contentKey = new String(cache.getDigest(file).toByteArray());
-    return cacheUploadService.submit(new Callable<String>() {
-      public String call() throws IOException {
-        if (containsFile(contentKey)) {
-          return contentKey;
-        }
-        Semaphore waitKey;
-        int shard = contentKey.hashCode() % LOCK_SHARDS;
-        shard = (shard + LOCK_SHARDS) % LOCK_SHARDS;
-        try {
-          uploadLock[shard].acquire(1);
-          if (!uploadingKeys.containsKey(contentKey)) {
-            uploadingKeys.put(contentKey, new Semaphore(1));
-          }
-          waitKey = uploadingKeys.get(contentKey);
-        } catch (InterruptedException e) {
-          throw new IOException("Failed to get lock for uploading.", e);
-        } finally {
-          uploadLock[shard].release(1);
-        }
-
-        try {
-          waitKey.acquire(1);
-          if (containsFile(contentKey)) {
-            return contentKey;
-          }
-          putFile(contentKey, execRoot.getRelative(file.getExecPathString()));
         } catch (InterruptedException e) {
           throw new IOException("Failed to put file to memory cache.", e);
         } finally {
