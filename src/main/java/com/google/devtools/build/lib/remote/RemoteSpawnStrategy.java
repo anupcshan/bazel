@@ -134,7 +134,7 @@ final class RemoteSpawnStrategy implements SpawnActionContext {
         return;
       }
 
-      System.out.println("Optional outputs:" + spawn.getOptionalOutputFiles());
+      // System.out.println("Optional outputs:" + spawn.getOptionalOutputFiles());
       FileOutErr outErr = actionExecutionContext.getFileOutErr();
       if (executeWorkRemotely(
           inputFileCache,
@@ -184,7 +184,7 @@ final class RemoteSpawnStrategy implements SpawnActionContext {
       return false;
     }
     try {
-      System.out.println("Outputs:" + outputs);
+      // System.out.println("Outputs:" + outputs);
       ListenableFuture<RemoteWorkExecutor.Response> future =
           remoteWorkExecutor.submit(
               execRoot,

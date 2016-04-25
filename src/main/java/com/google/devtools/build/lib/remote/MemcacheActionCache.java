@@ -152,7 +152,7 @@ final class MemcacheActionCache implements RemoteActionCache {
   }
 
   private void putFile(String key, Path file) throws IOException {
-    System.out.println("Uploading:" + key);
+    // System.out.println("Uploading:" + key);
     int fileSizeKBytes = (int) (file.getFileSize() / 1024);
     Preconditions.checkArgument(fileSizeKBytes < MAX_MEMORY_KBYTES);
     try {
