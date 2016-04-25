@@ -88,7 +88,7 @@ final class MemcacheActionCache implements RemoteActionCache {
     return putFileIfNotExist(contentKey, execRoot.getRelative(file.getExecPathString()));
   }
 
-  private ListenableFuture<String> putFileIfNotExist(String contentKey, Path file) throws IOException {
+  private ListenableFuture<String> putFileIfNotExist(final String contentKey, final Path file) throws IOException {
     return cacheUploadService.submit(new Callable<String>() {
       public String call() throws IOException {
         if (containsFile(contentKey)) {

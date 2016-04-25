@@ -56,7 +56,7 @@ class RestWorkExecutor extends MemcacheWorkExecutor {
   }
 
   @Override
-  public ListenableFuture<Response> submit(RemoteWorkRequest work) throws IOException {
+  public ListenableFuture<Response> submit(final RemoteWorkRequest work) throws IOException {
     return executorService.submit(new Callable<Response>(){
       public Response call() throws URISyntaxException,
           InvalidProtocolBufferException, IOException {

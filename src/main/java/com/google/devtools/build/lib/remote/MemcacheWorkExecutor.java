@@ -129,7 +129,7 @@ public class MemcacheWorkExecutor implements RemoteWorkExecutor {
   /**
    * Submit a work in the form of protobuf. This method executes the work locally.
    */
-  public ListenableFuture<Response> submit(RemoteWorkRequest work) throws IOException {
+  public ListenableFuture<Response> submit(final RemoteWorkRequest work) throws IOException {
     return executorService.submit(new Callable<Response>(){
         public Response call() throws IOException {
           ByteArrayOutputStream stdout = new ByteArrayOutputStream();
