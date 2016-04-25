@@ -31,12 +31,12 @@ import java.io.OutputStream;
 import java.util.Collection;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
-import java.util.Map;
 import java.util.HashMap;
 
 import com.hazelcast.internal.ascii.rest.RestValue;
@@ -54,8 +54,9 @@ final class MemcacheActionCache implements RemoteActionCache {
   private final ConcurrentMap<String, byte[]> cache;
   private static final int MAX_MEMORY_KBYTES = 512 * 1024;
   private final Semaphore uploadMemoryAvailable = new Semaphore(MAX_MEMORY_KBYTES, true);
-  private final Semaphore uploadLock = new Semaphore(1);
-  private final Map<String, Semaphore> uploadingKeys = new HashMap<String, Semaphore>();
+  private static final int LOCK_SHARDS = 16;
+  private final Semaphore[] uploadLock;
+  private final ConcurrentMap<String, Semaphore> uploadingKeys = new ConcurrentHashMap<String, Semaphore>();
   private final ExecutorService cacheUploadService = Executors.newFixedThreadPool(150);
 
   /**
@@ -65,6 +66,10 @@ final class MemcacheActionCache implements RemoteActionCache {
       Path execRoot, RemoteOptions options, ConcurrentMap<String, byte[]> cache) {
     this.execRoot = execRoot;
     this.cache = cache;
+    this.uploadLock = new Semaphore[LOCK_SHARDS];
+    for (int i = 0; i < LOCK_SHARDS; i ++) {
+      this.uploadLock[i] = new Semaphore(1);
+    }
   }
 
   @Override
@@ -76,16 +81,18 @@ final class MemcacheActionCache implements RemoteActionCache {
           return contentKey;
         }
         Semaphore waitKey;
+        int shard = contentKey.hashCode() % LOCK_SHARDS;
+        shard = (shard + LOCK_SHARDS) % LOCK_SHARDS;
         try {
-          uploadLock.acquire(1);
+          uploadLock[shard].acquire(1);
           if (!uploadingKeys.containsKey(contentKey)) {
             uploadingKeys.put(contentKey, new Semaphore(1));
           }
           waitKey = uploadingKeys.get(contentKey);
         } catch (InterruptedException e) {
-          throw new IOException("Failed to put file to memory cache.", e);
+          throw new IOException("Failed to get lock for uploading.", e);
         } finally {
-          uploadLock.release(1);
+          uploadLock[shard].release(1);
         }
 
         try {
@@ -114,16 +121,18 @@ final class MemcacheActionCache implements RemoteActionCache {
           return contentKey;
         }
         Semaphore waitKey;
+        int shard = contentKey.hashCode() % LOCK_SHARDS;
+        shard = (shard + LOCK_SHARDS) % LOCK_SHARDS;
         try {
-          uploadLock.acquire(1);
+          uploadLock[shard].acquire(1);
           if (!uploadingKeys.containsKey(contentKey)) {
             uploadingKeys.put(contentKey, new Semaphore(1));
           }
           waitKey = uploadingKeys.get(contentKey);
         } catch (InterruptedException e) {
-          throw new IOException("Failed to put file to memory cache.", e);
+          throw new IOException("Failed to get lock for uploading.", e);
         } finally {
-          uploadLock.release(1);
+          uploadLock[shard].release(1);
         }
 
         try {
