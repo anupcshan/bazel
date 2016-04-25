@@ -36,4 +36,12 @@ public final class RemoteOptions extends OptionsBase {
     help = "URL for the REST worker."
   )
   public String restWorkerUrl;
+
+  @Option(
+    name = "local_fallback",
+    defaultValue = "false",
+    category = "remote",
+    help = "Execute work locally if remote executors fail."
+  )
+  public boolean localFallback;
 }

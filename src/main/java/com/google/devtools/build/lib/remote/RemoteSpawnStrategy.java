@@ -58,6 +58,7 @@ final class RemoteSpawnStrategy implements SpawnActionContext {
   private final StandaloneSpawnStrategy standaloneStrategy;
   private final RemoteActionCache remoteActionCache;
   private final RemoteWorkExecutor remoteWorkExecutor;
+  private final RemoteOptions options;
 
   RemoteSpawnStrategy(
       Map<String, String> clientEnv,
@@ -70,6 +71,7 @@ final class RemoteSpawnStrategy implements SpawnActionContext {
     this.standaloneStrategy = new StandaloneSpawnStrategy(execRoot, verboseFailures);
     this.remoteActionCache = actionCache;
     this.remoteWorkExecutor = workExecutor;
+    this.options = options;
   }
 
   /**
@@ -150,10 +152,14 @@ final class RemoteSpawnStrategy implements SpawnActionContext {
         return;
       }
 
-      // If nothing works then run spawn locally.
-      standaloneStrategy.exec(spawn, actionExecutionContext);
-      if (remoteActionCache != null) {
-        remoteActionCache.putActionOutput(actionOutputKey, spawn.getOutputFiles());
+      if (options.localFallback) {
+        // If nothing works then run spawn locally.
+        standaloneStrategy.exec(spawn, actionExecutionContext);
+        if (remoteActionCache != null) {
+          remoteActionCache.putActionOutput(actionOutputKey, spawn.getOutputFiles());
+        }
+      } else {
+        throw new UserExecException("Unable to execute action remotely", new Exception());
       }
     } catch (IOException e) {
       throw new UserExecException("Unexpected IO error.", e);
