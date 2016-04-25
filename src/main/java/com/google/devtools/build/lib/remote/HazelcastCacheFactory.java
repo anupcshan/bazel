@@ -50,7 +50,7 @@ final class HazelcastCacheFactory {
       instance = Hazelcast.newHazelcastInstance();
     }
     IMap<String, byte[]> cache = instance.getMap(CACHE_NAME);
-    return new SynchronizedWrites(cache);
+    return cache;
   }
 
   static public class SynchronizedWrites<K, V> implements ConcurrentMap<K, V> {

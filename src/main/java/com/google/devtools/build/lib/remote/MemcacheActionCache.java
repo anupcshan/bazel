@@ -16,6 +16,9 @@ package com.google.devtools.build.lib.remote;
 
 import com.google.common.hash.HashCode;
 import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.devtools.build.lib.actions.ActionInput;
 import com.google.devtools.build.lib.actions.ActionInputFileCache;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.ThreadSafe;
@@ -57,7 +60,7 @@ final class MemcacheActionCache implements RemoteActionCache {
   private static final int LOCK_SHARDS = 16;
   private final Semaphore[] uploadLock;
   private final ConcurrentMap<String, Semaphore> uploadingKeys = new ConcurrentHashMap<String, Semaphore>();
-  private final ExecutorService cacheUploadService = Executors.newFixedThreadPool(150);
+  private final ListeningExecutorService cacheUploadService = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(40));
 
   /**
    * Construct an action cache using JCache API.
@@ -73,7 +76,7 @@ final class MemcacheActionCache implements RemoteActionCache {
   }
 
   @Override
-  public Future<String> putFileIfNotExist(Path file) throws IOException {
+  public ListenableFuture<String> putFileIfNotExist(Path file) throws IOException {
     String contentKey = HashCode.fromBytes(file.getMD5Digest()).toString();
     return cacheUploadService.submit(new Callable<String>() {
       public String call() throws IOException {
@@ -112,7 +115,7 @@ final class MemcacheActionCache implements RemoteActionCache {
   }
 
   @Override
-  public Future<String> putFileIfNotExist(ActionInputFileCache cache, ActionInput file) throws IOException {
+  public ListenableFuture<String> putFileIfNotExist(ActionInputFileCache cache, ActionInput file) throws IOException {
     // PerActionFileCache already converted this to a lowercase ascii string.. it's not consistent!
     String contentKey = new String(cache.getDigest(file).toByteArray());
     return cacheUploadService.submit(new Callable<String>() {
@@ -224,10 +227,18 @@ final class MemcacheActionCache implements RemoteActionCache {
   public void putActionOutput(String key, Collection<? extends ActionInput> outputs)
       throws IOException {
     CacheEntry.Builder actionOutput = CacheEntry.newBuilder();
-    HashMap<ActionInput, Future<String>> keyFutures = new HashMap<ActionInput, Future<String>>();
+    HashMap<ActionInput, ListenableFuture<String>> keyFutures = new HashMap<ActionInput, ListenableFuture<String>>();
     for (ActionInput output : outputs) {
       Path file = execRoot.getRelative(output.getExecPathString());
       keyFutures.put(output, putFileIfNotExist(file));
+    }
+
+    try {
+      Futures.allAsList(keyFutures.values()).get();
+    } catch (InterruptedException e) {
+      throw new IOException("Failed to put file to memory cache.", e);
+    } catch (ExecutionException e) {
+      throw new IOException("Failed to put file to memory cache.", e);
     }
 
     for (ActionInput output : outputs) {
@@ -247,9 +258,17 @@ final class MemcacheActionCache implements RemoteActionCache {
   public void putActionOutput(String key, Path execRoot, Collection<Path> files)
       throws IOException {
     CacheEntry.Builder actionOutput = CacheEntry.newBuilder();
-    HashMap<Path, Future<String>> keyFutures = new HashMap<Path, Future<String>>();
+    HashMap<Path, ListenableFuture<String>> keyFutures = new HashMap<Path, ListenableFuture<String>>();
     for (Path file : files) {
       keyFutures.put(file, putFileIfNotExist(file));
+    }
+
+    try {
+      Futures.allAsList(keyFutures.values()).get();
+    } catch (InterruptedException e) {
+      throw new IOException("Failed to put file to memory cache.", e);
+    } catch (ExecutionException e) {
+      throw new IOException("Failed to put file to memory cache.", e);
     }
 
     for (Path file : files) {
