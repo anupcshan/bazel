@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -85,13 +86,32 @@ func writeActionCacheEntry(cacheBaseURL string, key string, cacheEntry *remote.C
 }
 
 type BuildRequestHandler struct {
-	hazelcastCache cache.Cache
 	diskCache      *cache.DiskCache
+	hazelcastCache cache.Cache
+	workerPool     chan bool
+}
+
+func (bh *BuildRequestHandler) initializeWorkerPool(maxWorkers int) {
+	bh.workerPool = make(chan bool, maxWorkers)
+	for i := 0; i < maxWorkers; i++ {
+		bh.workerPool <- true
+	}
+}
+
+func (bh *BuildRequestHandler) takeWorker() {
+	<-bh.workerPool
+}
+
+func (bh *BuildRequestHandler) releaseWorker() {
+	bh.workerPool <- true
 }
 
 func (bh *BuildRequestHandler) HandleBuildRequest(w http.ResponseWriter, r *http.Request) {
 	workReq := new(remote.RemoteWorkRequest)
 	workRes := new(remote.RemoteWorkResponse)
+
+	bh.takeWorker()
+	defer bh.releaseWorker()
 
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -225,6 +245,10 @@ func (bh *BuildRequestHandler) HandleBuildRequest(w http.ResponseWriter, r *http
 func main() {
 	flag.Parse()
 
+	if *maxWorkers == 0 {
+		*maxWorkers = runtime.NumCPU()
+	}
+
 	log.SetFlags(log.Lmicroseconds | log.Lshortfile)
 
 	listenAddr := fmt.Sprintf(":%d", *port)
@@ -237,6 +261,9 @@ func main() {
 	diskCache := cache.NewDiskCache(*cacheDir, hc)
 
 	buildRequestHandler := &BuildRequestHandler{hazelcastCache: hc, diskCache: diskCache}
+	buildRequestHandler.initializeWorkerPool(*maxWorkers)
+
+	// TODO(anupc): Add handler to drain pool and terminate cleanly.
 
 	http.HandleFunc("/build", buildRequestHandler.HandleBuildRequest)
 
@@ -250,4 +277,5 @@ var (
 	workdirRoot  = flag.String("workdir-root", "/tmp/", "Directory to create working subdirectories to execute actions in")
 	cacheDir     = flag.String("cachedir", "/tmp/bazel-worker-cache", "Directory to store cached objects")
 	logCommands  = flag.Bool("log-commands", true, "Log all command executions (include stdout/stderr in case of failures)")
+	maxWorkers   = flag.Int("max-workers", 0, "Maximum number of parallel workers (defaults to number of CPUs)")
 )
