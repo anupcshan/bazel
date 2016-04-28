@@ -194,6 +194,7 @@ func (bh *BuildRequestHandler) HandleBuildRequest(w http.ResponseWriter, r *http
 
 	outputActionCache := new(remote.CacheEntry)
 
+	writingOutputFilesStart := time.Now()
 	for _, outputFile := range workReq.GetOutputFiles() {
 		filePath := filepath.Join(workDir, outputFile.Path)
 		if f, err := os.Open(filePath); err != nil {
@@ -204,13 +205,17 @@ func (bh *BuildRequestHandler) HandleBuildRequest(w http.ResponseWriter, r *http
 			return
 		} else {
 			checksum := md5.Sum(b)
+			logger.Printf("Writing %d bytes to cache", len(b))
 			writeCacheEntry(*cacheBaseURL, hex.EncodeToString(checksum[:md5.Size]), b)
 			outputFile.ContentKey = hex.EncodeToString(checksum[:md5.Size])
 			outputActionCache.Files = append(outputActionCache.Files, outputFile)
 		}
 	}
+	logger.Printf("Completed writing output files in %s", time.Since(writingOutputFilesStart))
 
+	writingActionKeyStart := time.Now()
 	writeActionCacheEntry(*cacheBaseURL, workReq.OutputKey, outputActionCache)
+	logger.Printf("Completed writing action key in %s", time.Since(writingActionKeyStart))
 
 	workRes.Success = true
 	w.WriteHeader(http.StatusOK)
