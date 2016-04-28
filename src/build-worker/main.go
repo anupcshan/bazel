@@ -40,47 +40,6 @@ func writeError(w http.ResponseWriter, statusCode int, workRes *remote.RemoteWor
 	respond(w, workRes)
 }
 
-func ensureCached(cacheBaseURL string, file *remote.FileEntry, cacheDir string) error {
-	filePath := filepath.Join(cacheDir, file.ContentKey)
-	if _, err := os.Stat(filePath); err == nil || !os.IsNotExist(err) {
-		return nil
-	}
-
-	dir := path.Dir(filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	fetchPath := fmt.Sprintf("%s/%s", cacheBaseURL, file.ContentKey)
-	if resp, err := http.Get(fetchPath); err != nil {
-		return err
-	} else {
-		defer resp.Body.Close()
-		perm := os.FileMode(0644)
-		if file.Executable {
-			perm = 0755
-		}
-		if f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, perm); err != nil {
-			return err
-		} else {
-			defer f.Close()
-			cacheEntry := new(remote.CacheEntry)
-
-			b, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return err
-			}
-			err = proto.Unmarshal(b, cacheEntry)
-			if err != nil {
-				return err
-			}
-			_, err = f.Write(cacheEntry.FileContent)
-			return err
-		}
-	}
-	return nil
-}
-
 func linkCachedObject(relPath string, workDir string, cachePath string) error {
 	filePath := filepath.Join(workDir, relPath)
 
